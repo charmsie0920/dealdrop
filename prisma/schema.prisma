@@ -13,9 +13,82 @@ datasource db {
   provider = "postgresql"
 }
 
+// User & Device Info
+model User {
+  id               String   @id @default(uuid())
+  email            String   @unique
+  notification_token String?
+  created_at       DateTime @default(now())
+  // Relations
+  interests        UserInterest[]
+}
 
+// Stores/Retailers
+model Retailer {
+  id               String   @id @default(uuid())
+  name             String
+  domain           String   @unique
+  // Relations
+  price_records    PriceRecord[]
+}
 
+// Category Master (The 5 Pentagon Categories)
+model Category {
+  id                   String   @id @default(uuid())
+  name                 String   @unique // e.g., Dairy, Poultry, Produce, Household, Dry Goods
+  current_index_score  Decimal? // Calculated daily: Today Avg / 7-Day Avg
+  // Relations
+  products             Product[]
+}
 
+// Product Catalog (The "Targeted" List)
+model Product {
+  id                    String   @id @default(uuid())
+  category_id           String
+  group_id              String   // e.g., 'butter_salted_250g' to group different brands
+  name                  String
+  brand                 String?
+  is_kvi                Boolean  @default(false) // True for the "Essential 100" items
+  rolling_avg_unit_price Decimal? // The 30-day benchmark for this specific item
+  // Relations
+  category              Category       @relation(fields: [category_id], references: [id])
+  user_interests        UserInterest[]
+  price_records         PriceRecord[]
+}
 
+// The AI Learning & Watchlist Table
+model UserInterest {
+  id                String   @id @default(uuid())
+  user_id           String
+  product_id        String
+  interest_score    Decimal  @default(0) // Increments on view, decays over time
+  is_watchlisted    Boolean  @default(false)
+  last_interaction  DateTime @default(now())
+  // Relations
+  user              User     @relation(fields: [user_id], references: [id])
+  product           Product  @relation(fields: [product_id], references: [id])
+  
+  @@unique([user_id, product_id])
+  @@index([user_id])
+  @@index([product_id])
+}
 
-
+// Daily Price Snapshots (The "Big Data" Table)
+model PriceRecord {
+  id                  String   @id @default(uuid())
+  product_id          String
+  retailer_id         String
+  price               Decimal  // Sticker price
+  unit_price          Decimal  // Price per standard unit (e.g., per 100g)
+  is_deal             Boolean  @default(false) // AI-flagged if unit_price < rolling_avg_unit_price
+  price_delta_percent Decimal? // Percentage change from rolling average
+  timestamp           DateTime @default(now())
+  // Relations
+  product             Product  @relation(fields: [product_id], references: [id])
+  retailer            Retailer @relation(fields: [retailer_id], references: [id])
+  
+  @@index([product_id])
+  @@index([retailer_id])
+  @@index([timestamp])
+  @@index([is_deal])
+}
